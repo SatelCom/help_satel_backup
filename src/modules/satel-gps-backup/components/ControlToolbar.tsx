@@ -23,10 +23,13 @@ interface ControlToolbarProps {
   searchTerm: string;
   showFolderSettings: boolean;
   localFolder: string;
+  folderDisplayName?: string;
+  isClientPickerSupported?: boolean;
   statusMessage: { type: 'success' | 'error'; text: string } | null;
   onSearchChange: (value: string) => void;
   onCopyClipboard: () => void;
   onSaveToFolder: () => void;
+  onChooseFolder?: () => void;
   onDownload: () => void;
   onReset: () => void;
   onToggleFolderSettings: () => void;
@@ -43,10 +46,13 @@ export function ControlToolbar({
   searchTerm,
   showFolderSettings,
   localFolder,
+  folderDisplayName,
+  isClientPickerSupported,
   statusMessage,
   onSearchChange,
   onCopyClipboard,
   onSaveToFolder,
+  onChooseFolder,
   onDownload,
   onReset,
   onToggleFolderSettings,
@@ -88,18 +94,18 @@ export function ControlToolbar({
                 ? 'bg-blue-600 text-white border-blue-500'
                 : 'bg-slate-800/90 text-slate-300 border-slate-700 hover:text-white hover:bg-slate-700'
             }`}
-            title="Configurar ubicación de guardado en el escritorio"
+            title="Configurar ubicación de guardado en tu equipo"
           >
             <FolderOpen className="w-3.5 h-3.5 text-blue-400" />
-            <span>Carpeta Backup</span>
+            <span>{folderDisplayName ? `Carpeta: ${folderDisplayName}` : 'Carpeta Backup'}</span>
           </button>
 
-          {/* Direct Save to Desktop Folder (BACKUPS SATELCOM) */}
+          {/* Direct Save to Desktop Folder */}
           <button
             onClick={onSaveToFolder}
             disabled={savingLocal}
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-all shadow-sm active:scale-95 disabled:opacity-50"
-            title={`Guardar directamente en ${localFolder}`}
+            title={`Guardar directamente en ${folderDisplayName || localFolder}`}
           >
             {savingLocal ? (
               <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-400" />
@@ -131,24 +137,43 @@ export function ControlToolbar({
 
       {/* Collapsible Folder Settings Panel */}
       {showFolderSettings && (
-        <div className="p-3 rounded-xl bg-slate-900/90 border border-blue-500/30 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs shadow-lg">
-          <div className="flex-1 flex items-center gap-2">
-            <FolderCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="text-slate-300 font-medium shrink-0">Carpeta de destino fija:</span>
-            <input
-              type="text"
-              value={localFolder}
-              onChange={(e) => onLocalFolderChange(e.target.value)}
-              placeholder="Ruta en tu escritorio"
-              className="flex-1 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white font-mono text-xs focus:outline-none focus:border-blue-500"
-            />
+        <div className="p-3.5 rounded-xl bg-slate-900/95 border border-blue-500/30 flex flex-col gap-2.5 text-xs shadow-lg">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="flex-1 flex items-center gap-2 flex-wrap">
+              <FolderCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="text-slate-300 font-medium shrink-0">Carpeta vinculada:</span>
+              <span className="px-2.5 py-1 rounded-md bg-slate-950 border border-slate-700 text-emerald-300 font-mono text-xs">
+                {folderDisplayName || localFolder || 'BACKUPS SATELCOM'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {isClientPickerSupported && onChooseFolder && (
+                <button
+                  type="button"
+                  onClick={onChooseFolder}
+                  className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs flex items-center gap-1.5 transition-all shadow-sm"
+                  title="Abre el explorador de Windows para seleccionar tu carpeta de backups (ej: BACKUPS SATELCOM en tu Escritorio)"
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />
+                  <span>Seleccionar Carpeta en PC</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onToggleFolderSettings}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium text-xs transition-all"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
-          <button
-            onClick={onToggleFolderSettings}
-            className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition-all shrink-0"
-          >
-            Aceptar
-          </button>
+
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            {isClientPickerSupported
+              ? '💡 Funciona en local y desplegado: el navegador guarda el Excel directamente en la carpeta elegida de tu computadora.'
+              : '💡 Ruta asignada para el guardado local del archivo.'}
+          </p>
         </div>
       )}
 

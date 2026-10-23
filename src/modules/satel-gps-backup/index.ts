@@ -34,6 +34,16 @@ export {
   BACKUP_FOLDER_NAME,
 } from './services/backup-service';
 
+// 3.1 Manejo de Carpetas en el Navegador (Compatible con apps desplegadas en la nube)
+export {
+  isFileSystemAccessSupported,
+  getSavedDirectoryHandle,
+  saveDirectoryHandle,
+  clearSavedDirectoryHandle,
+  pickBackupDirectory,
+  saveToClientDirectory,
+} from './services/client-folder-service';
+
 // 4. Handlers para Rutas API (Next.js / Node)
 export { GET, POST } from './server/api-handlers';
 

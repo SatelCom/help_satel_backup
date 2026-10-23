@@ -8,6 +8,13 @@ import {
   getTodayDateString,
   EXPORT_HEADERS,
 } from '../services/excel-processor';
+import {
+  isFileSystemAccessSupported,
+  getSavedDirectoryHandle,
+  pickBackupDirectory,
+  saveToClientDirectory,
+  ClientDirectoryHandle,
+} from '../services/client-folder-service';
 import { ParseResult, SatelGpsModuleProps } from '../types';
 import { UploadDropzone } from './UploadDropzone';
 import { ControlToolbar } from './ControlToolbar';
@@ -26,13 +33,29 @@ export function SatelGpsBackup({
   const [copied, setCopied] = useState(false);
   const [todayDate, setTodayDate] = useState<string>('');
   const [localFolder, setLocalFolder] = useState<string>(defaultFolder || '');
+  const [clientDirHandle, setClientDirHandle] = useState<ClientDirectoryHandle | null>(null);
+  const [folderDisplayName, setFolderDisplayName] = useState<string>('BACKUPS SATELCOM');
+  const [isClientPickerSupported, setIsClientPickerSupported] = useState<boolean>(false);
   const [savingLocal, setSavingLocal] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showFolderSettings, setShowFolderSettings] = useState(false);
 
-  // Initialize current date and query system desktop BACKUPS SATELCOM path if not provided
+  // Initialize date, client directory handle, and default folder
   useEffect(() => {
     setTodayDate(getTodayDateString());
+    const supported = isFileSystemAccessSupported();
+    setIsClientPickerSupported(supported);
+
+    if (supported) {
+      getSavedDirectoryHandle()
+        .then((handle) => {
+          if (handle) {
+            setClientDirHandle(handle);
+            setFolderDisplayName(handle.name);
+          }
+        })
+        .catch(() => {});
+    }
 
     if (!defaultFolder) {
       fetch(apiEndpoint)
@@ -40,10 +63,15 @@ export function SatelGpsBackup({
         .then((data) => {
           if (data.defaultFolder) {
             setLocalFolder(data.defaultFolder);
+            setFolderDisplayName((prev) => {
+              if (prev && prev !== 'BACKUPS SATELCOM') return prev;
+              const extracted = data.defaultFolder.split(/[\\/]/).filter(Boolean).pop();
+              return extracted || 'BACKUPS SATELCOM';
+            });
           }
         })
         .catch((err) => {
-          console.warn('No se pudo obtener la carpeta por defecto del servidor:', err);
+          console.warn('Servidor sin acceso a fs local (entorno desplegado):', err);
         });
     }
   }, [apiEndpoint, defaultFolder]);
@@ -94,12 +122,73 @@ export function SatelGpsBackup({
     }
   };
 
-  // Save directly to desktop BACKUPS SATELCOM folder via backend API
+  // Open native folder picker to select custom backup directory on user PC
+  const handleChooseFolder = async () => {
+    try {
+      const handle = await pickBackupDirectory();
+      if (handle) {
+        setClientDirHandle(handle);
+        setFolderDisplayName(handle.name);
+        setStatusMessage({
+          type: 'success',
+          text: `Carpeta vinculada: "${handle.name}". Los backups se guardarán directamente aquí.`,
+        });
+        setTimeout(() => setStatusMessage(null), 4000);
+      }
+    } catch (err: unknown) {
+      const error = err as Error;
+      setStatusMessage({ type: 'error', text: error.message || 'Error seleccionando carpeta' });
+    }
+  };
+
+  // Save directly to target folder (works in deployed cloud environments and local)
   const handleSaveToFolder = async () => {
     if (!parseResult || parseResult.processedRows.length === 0) return;
     setSavingLocal(true);
     setStatusMessage(null);
 
+    // Option 1: File System Access API (Works 100% in deployed app & localhost from browser)
+    if (isClientPickerSupported) {
+      try {
+        let handle = clientDirHandle;
+        if (!handle) {
+          handle = await pickBackupDirectory();
+          if (!handle) {
+            setSavingLocal(false);
+            return;
+          }
+          setClientDirHandle(handle);
+          setFolderDisplayName(handle.name);
+        }
+
+        const res = await saveToClientDirectory(handle, parseResult.processedRows, backupFileName);
+
+        confetti({
+          particleCount: 80,
+          spread: 60,
+          origin: { y: 0.8 },
+        });
+
+        const successText = `¡Guardado en "${res.folderName}" como "${res.fileName}"!`;
+        setStatusMessage({ type: 'success', text: successText });
+
+        if (onSaveSuccess) {
+          onSaveSuccess({
+            success: true,
+            savedPath: `${res.folderName}/${res.fileName}`,
+            fileName: res.fileName,
+            wasLocked: false,
+            message: successText,
+          });
+        }
+        setSavingLocal(false);
+        return;
+      } catch (clientErr: unknown) {
+        console.warn('Guardado directo en cliente falló o requirió fallback:', clientErr);
+      }
+    }
+
+    // Option 2: Server API endpoint (for local development on Node)
     try {
       const res = await fetch(apiEndpoint, {
         method: 'POST',
@@ -113,7 +202,13 @@ export function SatelGpsBackup({
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Error al guardar');
+        // Fallback for cloud/serverless where server disk is read-only
+        generateProcessedExcel(parseResult.processedRows, backupFileName);
+        setStatusMessage({
+          type: 'success',
+          text: `Servidor en la nube: archivo descargado en tu equipo como ${backupFileName}`,
+        });
+        return;
       }
 
       confetti({
@@ -128,8 +223,16 @@ export function SatelGpsBackup({
       }
     } catch (err: unknown) {
       const error = err as Error;
-      console.error(error);
-      setStatusMessage({ type: 'error', text: error.message || 'Error al guardar en carpeta de backup' });
+      // Respaldo de descarga inmediata
+      try {
+        generateProcessedExcel(parseResult.processedRows, backupFileName);
+        setStatusMessage({
+          type: 'success',
+          text: `Descargado directamente en tu equipo: ${backupFileName}`,
+        });
+      } catch {
+        setStatusMessage({ type: 'error', text: error.message || 'Error al guardar archivo' });
+      }
     } finally {
       setSavingLocal(false);
     }
@@ -204,10 +307,13 @@ export function SatelGpsBackup({
             searchTerm={searchTerm}
             showFolderSettings={showFolderSettings}
             localFolder={localFolder}
+            folderDisplayName={folderDisplayName}
+            isClientPickerSupported={isClientPickerSupported}
             statusMessage={statusMessage}
             onSearchChange={setSearchTerm}
             onCopyClipboard={handleCopyClipboard}
             onSaveToFolder={handleSaveToFolder}
+            onChooseFolder={handleChooseFolder}
             onDownload={handleDownload}
             onReset={handleReset}
             onToggleFolderSettings={() => setShowFolderSettings((prev) => !prev)}

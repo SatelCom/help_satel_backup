@@ -143,7 +143,36 @@ export function getTodayDateString(): string {
  * Automatically identifies which row contains table headers
  */
 export function findHeaderRow(matrix: unknown[][]): { headerIndex: number; headers: string[] } {
-  const keywords = ['nombre', 'imei', 'sim', 'equipo', 'conexion', 'protocolo', 'usuario', 'cuenta'];
+  const keywords = [
+    'nombre',
+    'name',
+    'imei',
+    'activo',
+    'active',
+    'sim',
+    'chip',
+    'telefono',
+    'phone',
+    'equipo',
+    'device',
+    'modelo',
+    'model',
+    'conexion',
+    'connection',
+    'protocolo',
+    'protocol',
+    'puerto',
+    'port',
+    'estado',
+    'status',
+    'usuario',
+    'user',
+    'cuenta',
+    'account',
+    'vence',
+    'expira',
+    'expire',
+  ];
 
   for (let r = 0; r < Math.min(matrix.length, 15); r++) {
     const row = matrix[r] || [];
@@ -185,24 +214,112 @@ function getColumnMapping(headers: string[]): Record<string, number> {
     const h = normalizeHeader(header);
     if (!h) return;
 
-    if (h.includes('nombre')) {
-      mapping.nombre = index;
-    } else if (h.includes('imei')) {
-      mapping.imei = index;
-    } else if (h === 'activo' || h.startsWith('activo')) {
-      mapping.activo = index;
-    } else if (h.includes('expira') || h.includes('vence') || h.includes('vencimiento') || h.includes('expire')) {
-      mapping.vence = index;
-    } else if (h.includes('equipo') || h.includes('dispositivo') || h.includes('modelo')) {
-      mapping.equipoGps = index;
-    } else if (h.includes('sim') || h.includes('chip') || h.includes('telefono') || h.includes('telf')) {
-      mapping.numeroChip = index;
-    } else if (h.includes('conexion') || h.includes('ultima') || h.includes('fecha')) {
-      mapping.ultimaConexion = index;
-    } else if (h === 'estado' || h.includes('status')) {
-      mapping.estado = index;
-    } else if (h.includes('usuario') || h.includes('cuenta')) {
+    // 1. Usuarios / Cuenta de Usuario / User account / Users / Accounts
+    if (
+      h.includes('usuario') ||
+      h.includes('cuenta') ||
+      h.includes('user') ||
+      h.includes('account') ||
+      h.includes('cliente') ||
+      h.includes('client')
+    ) {
       mapping.usuarios = index;
+    }
+    // 2. Nombre / Name / Unit name / Device name / Vehiculo
+    else if (
+      h.includes('nombre') ||
+      h === 'name' ||
+      h.startsWith('name') ||
+      h.includes('device name') ||
+      h.includes('unit name') ||
+      h.includes('vehiculo') ||
+      h.includes('vehicle')
+    ) {
+      mapping.nombre = index;
+    }
+    // 3. IMEI / Device ID
+    else if (h.includes('imei') || h === 'identificador' || h === 'device id') {
+      mapping.imei = index;
+    }
+    // 4. Activo / Active
+    else if (
+      h === 'activo' ||
+      h.startsWith('activo') ||
+      h === 'active' ||
+      h.startsWith('active') ||
+      h.includes('is active')
+    ) {
+      mapping.activo = index;
+    }
+    // 5. Vence / Expira el / Expires on / Expiration / Expiry
+    else if (
+      h.includes('expira') ||
+      h.includes('expire') ||
+      h.includes('expiry') ||
+      h.includes('expiration') ||
+      h.includes('vence') ||
+      h.includes('vencimiento') ||
+      h.includes('valid until')
+    ) {
+      mapping.vence = index;
+    }
+    // 6. Ultima conexion / Last connection / Fecha / Last seen / Timestamp
+    else if (
+      h.includes('ultima') ||
+      h.includes('last') ||
+      h.includes('latest') ||
+      h === 'ultima conexion' ||
+      h === 'last connection' ||
+      h.includes('last seen') ||
+      h.includes('last update') ||
+      h.includes('last report') ||
+      ((h.includes('fecha') || (h.includes('date') && !h.includes('valid')) || h.includes('timestamp')) &&
+        !h.includes('expir') &&
+        !h.includes('venc'))
+    ) {
+      mapping.ultimaConexion = index;
+    }
+    // 7. Estado / Connection (status) / Status / State / Online
+    else if (
+      h === 'estado' ||
+      h === 'status' ||
+      h === 'state' ||
+      h === 'connection' ||
+      h === 'connection status' ||
+      h.includes('status') ||
+      h.includes('online') ||
+      (h.includes('connection') &&
+        !h.includes('last') &&
+        !h.includes('ultima') &&
+        !h.includes('time') &&
+        !h.includes('date'))
+    ) {
+      mapping.estado = index;
+    }
+    // 8. Equipo GPS / Dispositivo / GPS Device / Device / Modelo / Model
+    else if (
+      h.includes('equipo') ||
+      h.includes('dispositivo') ||
+      h.includes('device') ||
+      h.includes('modelo') ||
+      h.includes('model') ||
+      h.includes('hardware') ||
+      (h.includes('gps') && !h.includes('satel'))
+    ) {
+      mapping.equipoGps = index;
+    }
+    // 9. # de Telefono SIM / SIM Phone number / SIM / Chip / Phone / Mobile
+    else if (
+      h.includes('sim') ||
+      h.includes('chip') ||
+      h.includes('telefono') ||
+      h.includes('phone') ||
+      h.includes('telf') ||
+      h.includes('msisdn') ||
+      h.includes('mobile') ||
+      h.includes('celular')
+    ) {
+      mapping.numeroChip = index;
     }
   });
 

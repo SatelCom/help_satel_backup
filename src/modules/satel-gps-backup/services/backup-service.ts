@@ -32,14 +32,22 @@ export function getDesktopPath(): string {
  * Automatically creates the folder if it does not yet exist.
  */
 export function getDefaultBackupDirectory(): string {
-  const desktop = getDesktopPath();
-  const backupFolder = path.join(desktop, BACKUP_FOLDER_NAME);
+  try {
+    const desktop = getDesktopPath();
+    const backupFolder = path.join(desktop, BACKUP_FOLDER_NAME);
 
-  if (!fs.existsSync(backupFolder)) {
-    fs.mkdirSync(backupFolder, { recursive: true });
+    if (!fs.existsSync(backupFolder)) {
+      try {
+        fs.mkdirSync(backupFolder, { recursive: true });
+      } catch {
+        // Ignorar si el sistema de archivos es de solo lectura (como Vercel/Cloud)
+      }
+    }
+
+    return backupFolder;
+  } catch {
+    return path.join('Desktop', BACKUP_FOLDER_NAME);
   }
-
-  return backupFolder;
 }
 
 /**
@@ -56,7 +64,14 @@ export function writeBackupToDisk(
     : getDefaultBackupDirectory();
 
   if (!fs.existsSync(finalFolder)) {
-    fs.mkdirSync(finalFolder, { recursive: true });
+    try {
+      fs.mkdirSync(finalFolder, { recursive: true });
+    } catch (mkdirErr: unknown) {
+      const err = mkdirErr as Error;
+      throw new Error(
+        `No se puede crear la carpeta en este servidor desplegado (${err.message}). Por favor utiliza la opción de guardado directo del navegador.`
+      );
+    }
   }
 
   const baseName = fileName

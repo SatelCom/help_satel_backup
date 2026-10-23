@@ -104,3 +104,13 @@ const result = parseExcelFile(arrayBuffer, 'reporte.xlsx');
 const guardado = writeBackupToDisk(result.processedRows);
 console.log(guardado.savedPath);
 ```
+
+---
+
+## 🌐 Compatibilidad en Entornos Desplegados (Vercel, Render, AWS, Docker)
+
+Cuando la aplicación está desplegada en un servidor remoto o en la nube, el servidor no tiene acceso al disco duro del usuario. Para resolver esto:
+
+1. **Guardado Directo en Navegador (`File System Access API`)**: En navegadores como Chrome, Edge y Opera, el usuario puede seleccionar su carpeta local (`BACKUPS SATELCOM`) con un solo clic. El navegador guarda el Excel directamente en su disco y recuerda la carpeta para los siguientes backups.
+2. **Descarga Instantánea**: En navegadores sin soporte de selección de carpetas, el botón genera la descarga directa del archivo `.xlsx` en la carpeta de Descargas del usuario.
+3. **Servidor Local (Node/Localhost)**: Mantiene el endpoint `/api/save-local` usando el sistema de archivos del sistema operativo.
