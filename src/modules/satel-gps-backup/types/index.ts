@@ -10,6 +10,7 @@ export interface ProcessedGPSRow {
   ultimaHora: string;
   estado: string;
   usuarios: string;
+  sheetName?: string;
 }
 
 export interface ParseResult {
@@ -20,6 +21,8 @@ export interface ParseResult {
   rawHeaders: string[];
   rawRows: unknown[][];
   processedRows: ProcessedGPSRow[];
+  sheets: Record<string, ProcessedGPSRow[]>;
+  allProcessedRows: ProcessedGPSRow[];
   totalRawRows: number;
   totalProcessedRows: number;
 }

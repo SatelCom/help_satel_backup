@@ -17,6 +17,7 @@ import {
 interface ControlToolbarProps {
   backupFileName: string;
   totalRows: number;
+  totalSheets?: number;
   activeDate: string;
   savingLocal: boolean;
   copied: boolean;
@@ -40,6 +41,7 @@ interface ControlToolbarProps {
 export function ControlToolbar({
   backupFileName,
   totalRows,
+  totalSheets = 1,
   activeDate,
   savingLocal,
   copied,
@@ -74,9 +76,18 @@ export function ControlToolbar({
               <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 {backupFileName}
               </span>
+              {totalSheets > 1 && (
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                  {totalSheets} hojas
+                </span>
+              )}
             </div>
             <div className="text-[11px] text-slate-400">
-              Total: <strong className="text-white">{totalRows}</strong> registros &bull;{' '}
+              Total: <strong className="text-white">{totalRows}</strong> registros
+              {totalSheets > 1 && (
+                <> &bull; <span className="text-blue-300 font-medium">{totalSheets} hojas procesadas</span></>
+              )}{' '}
+              &bull;{' '}
               <span className="text-slate-300">
                 Fecha: <strong className="text-emerald-400">{activeDate}</strong>
               </span>

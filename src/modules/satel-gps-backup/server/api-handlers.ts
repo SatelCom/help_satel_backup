@@ -24,20 +24,23 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { rows, folderPath, fileName } = body as {
-      rows: ProcessedGPSRow[];
+    const { rows, sheets, folderPath, fileName } = body as {
+      rows?: ProcessedGPSRow[];
+      sheets?: Record<string, ProcessedGPSRow[]>;
       folderPath?: string;
       fileName?: string;
     };
 
-    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+    const targetData = sheets && Object.keys(sheets).length > 0 ? sheets : rows;
+
+    if (!targetData || (Array.isArray(targetData) && targetData.length === 0)) {
       return NextResponse.json(
         { error: 'No se enviaron registros válidos para guardar.' },
         { status: 400 }
       );
     }
 
-    const result = writeBackupToDisk(rows, folderPath, fileName);
+    const result = writeBackupToDisk(targetData, folderPath, fileName);
     return NextResponse.json(result);
   } catch (error: unknown) {
     const err = error as NodeJS.ErrnoException;

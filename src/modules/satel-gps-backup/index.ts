@@ -11,6 +11,7 @@ export { SatelGpsBackup, default as SatelGpsBackupModule } from './components/Sa
 export { DeviceTable } from './components/DeviceTable';
 export { ControlToolbar } from './components/ControlToolbar';
 export { UploadDropzone } from './components/UploadDropzone';
+export { SheetTabs } from './components/SheetTabs';
 
 // 2. Procesamiento de Excel y Datos
 export {
@@ -22,6 +23,7 @@ export {
   getTodayDateString,
   findHeaderRow,
   normalizeHeader,
+  sanitizeSheetName,
   EXPORT_HEADERS,
   COLUMN_WIDTHS,
 } from './services/excel-processor';

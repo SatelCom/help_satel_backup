@@ -176,11 +176,11 @@ export async function verifyPermission(handle: ClientDirectoryHandle): Promise<b
 }
 
 /**
- * Saves processed GPS rows into the specified directory handle directly from the browser
+ * Saves processed GPS rows or multi-sheet mapping into the specified directory handle directly from the browser
  */
 export async function saveToClientDirectory(
   handle: ClientDirectoryHandle,
-  rows: ProcessedGPSRow[],
+  data: ProcessedGPSRow[] | Record<string, ProcessedGPSRow[]>,
   baseFileName: string
 ): Promise<{ success: boolean; fileName: string; folderName: string }> {
   const hasPermission = await verifyPermission(handle);
@@ -188,7 +188,7 @@ export async function saveToClientDirectory(
     throw new Error('Se requiere permiso de escritura para guardar en la carpeta seleccionada.');
   }
 
-  const wb = createProcessedWorkbook(rows);
+  const wb = createProcessedWorkbook(data);
   const arrayBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
   const blob = new Blob([arrayBuffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

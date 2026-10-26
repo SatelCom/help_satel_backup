@@ -379,6 +379,7 @@ export function processExcelMatrix(
       ultimaHora,
       estado,
       usuarios,
+      sheetName,
     });
   }
 
@@ -390,13 +391,15 @@ export function processExcelMatrix(
     rawHeaders: headers,
     rawRows: matrix.slice(headerIndex),
     processedRows,
+    sheets: { [sheetName]: processedRows },
+    allProcessedRows: processedRows,
     totalRawRows: matrix.length,
     totalProcessedRows: processedRows.length,
   };
 }
 
 /**
- * Parses raw ArrayBuffer into a ParseResult
+ * Parses raw ArrayBuffer into a ParseResult, processing every sheet found in the workbook
  */
 export function parseExcelFile(buffer: ArrayBuffer, fileName: string): ParseResult {
   const workbook = XLSX.read(buffer, {
@@ -405,29 +408,84 @@ export function parseExcelFile(buffer: ArrayBuffer, fileName: string): ParseResu
     cellDates: true,
   });
 
-  const firstSheetName = workbook.SheetNames[0] || 'Hoja1';
-  const worksheet = workbook.Sheets[firstSheetName];
+  const sheetNames = workbook.SheetNames || [];
+  const sheets: Record<string, ProcessedGPSRow[]> = {};
+  const allProcessedRows: ProcessedGPSRow[] = [];
+  let totalRawRows = 0;
+  let firstHeaderIndex = 0;
+  let firstHeaders: string[] = [];
+  let firstRawRows: unknown[][] = [];
+  let globalItemCounter = 1;
 
-  const matrix: unknown[][] = XLSX.utils.sheet_to_json(worksheet, {
-    header: 1,
-    defval: '',
-    raw: false,
-  });
+  for (let i = 0; i < sheetNames.length; i++) {
+    const sheetName = sheetNames[i];
+    const worksheet = workbook.Sheets[sheetName];
+    if (!worksheet) continue;
 
-  const result = processExcelMatrix(matrix, fileName, firstSheetName);
-  result.sheetNames = workbook.SheetNames;
-  return result;
+    const matrix: unknown[][] = XLSX.utils.sheet_to_json(worksheet, {
+      header: 1,
+      defval: '',
+      raw: false,
+    });
+
+    totalRawRows += matrix.length;
+
+    const sheetResult = processExcelMatrix(matrix, fileName, sheetName);
+    sheets[sheetName] = sheetResult.processedRows;
+
+    if (i === 0) {
+      firstHeaderIndex = sheetResult.headerRowIndex;
+      firstHeaders = sheetResult.rawHeaders;
+      firstRawRows = sheetResult.rawRows;
+    }
+
+    // Accumulate rows into allProcessedRows with sequential item numbers
+    sheetResult.processedRows.forEach((r) => {
+      allProcessedRows.push({
+        ...r,
+        item: globalItemCounter++,
+        sheetName,
+      });
+    });
+  }
+
+  const firstSheetName = sheetNames[0] || 'Hoja 1';
+  // If first sheet has 0 processed rows but other sheets have rows, default to first non-empty sheet
+  const firstNonEmpty = sheetNames.find((s) => sheets[s] && sheets[s].length > 0) || firstSheetName;
+  const initialRows = sheets[firstNonEmpty] || allProcessedRows;
+
+  return {
+    fileName,
+    sheetNames,
+    activeSheet: firstNonEmpty,
+    headerRowIndex: firstHeaderIndex,
+    rawHeaders: firstHeaders,
+    rawRows: firstRawRows,
+    processedRows: initialRows,
+    sheets,
+    allProcessedRows,
+    totalRawRows,
+    totalProcessedRows: allProcessedRows.length,
+  };
 }
 
 /**
- * Creates a standardized XLSX.WorkBook with explicit string formatting for IMEI, Activo, and Chip
+ * Sanitizes sheet names according to Excel rules (max 31 chars, no forbidden chars: \ / ? * : [ ])
  */
-export function createProcessedWorkbook(rows: ProcessedGPSRow[]): XLSX.WorkBook {
+export function sanitizeSheetName(name: string): string {
+  const cleaned = name.replace(/[:\\/?*\[\]]/g, '_').trim().slice(0, 31);
+  return cleaned || 'Hoja';
+}
+
+/**
+ * Builds a formatted XLSX WorkSheet from GPS rows
+ */
+function buildWorksheetForRows(rows: ProcessedGPSRow[]): XLSX.WorkSheet {
   const sheetData: unknown[][] = [[...EXPORT_HEADERS]];
 
-  rows.forEach((r) => {
+  rows.forEach((r, idx) => {
     sheetData.push([
-      r.item,
+      r.item || idx + 1,
       r.nombre,
       r.imei,
       r.activo,
@@ -457,16 +515,61 @@ export function createProcessedWorkbook(rows: ProcessedGPSRow[]): XLSX.WorkBook 
     if (ws[chipCellAddr]) ws[chipCellAddr].t = 's';
   }
 
+  return ws;
+}
+
+/**
+ * Creates a standardized XLSX.WorkBook.
+ * Supports either a single list of rows (1 sheet) or a map of sheets Record<string, ProcessedGPSRow[]>
+ * to preserve every sheet with its original name in the output Excel.
+ */
+export function createProcessedWorkbook(
+  data: ProcessedGPSRow[] | Record<string, ProcessedGPSRow[]>,
+  defaultSheetName: string = 'Dispositivos'
+): XLSX.WorkBook {
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Dispositivos');
+
+  if (Array.isArray(data)) {
+    const ws = buildWorksheetForRows(data);
+    XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(defaultSheetName));
+    return wb;
+  }
+
+  // Multi-sheet mapping
+  const sheetNames = Object.keys(data);
+  if (sheetNames.length === 0) {
+    const ws = buildWorksheetForRows([]);
+    XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(defaultSheetName));
+    return wb;
+  }
+
+  const usedNames = new Set<string>();
+
+  sheetNames.forEach((sheetKey) => {
+    let safeName = sanitizeSheetName(sheetKey);
+    let candidate = safeName;
+    let counter = 1;
+    while (usedNames.has(candidate.toLowerCase())) {
+      candidate = `${safeName.slice(0, 27)}_${counter++}`;
+    }
+    usedNames.add(candidate.toLowerCase());
+
+    const rows = data[sheetKey] || [];
+    const ws = buildWorksheetForRows(rows);
+    XLSX.utils.book_append_sheet(wb, ws, candidate);
+  });
+
   return wb;
 }
 
 /**
- * Triggers a browser download of the standardized Excel file
+ * Triggers a browser download of the standardized Excel file (supports multi-sheet or single sheet)
  */
-export function generateProcessedExcel(rows: ProcessedGPSRow[], filename: string): void {
-  const wb = createProcessedWorkbook(rows);
+export function generateProcessedExcel(
+  data: ProcessedGPSRow[] | Record<string, ProcessedGPSRow[]>,
+  filename: string
+): void {
+  const wb = createProcessedWorkbook(data);
   const finalName = filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`;
   XLSX.writeFile(wb, finalName);
 }

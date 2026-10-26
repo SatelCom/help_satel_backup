@@ -19,6 +19,7 @@ import { ParseResult, SatelGpsModuleProps } from '../types';
 import { UploadDropzone } from './UploadDropzone';
 import { ControlToolbar } from './ControlToolbar';
 import { DeviceTable } from './DeviceTable';
+import { SheetTabs } from './SheetTabs';
 
 export function SatelGpsBackup({
   apiEndpoint = '/api/save-local',
@@ -28,6 +29,7 @@ export function SatelGpsBackup({
   className = '',
 }: SatelGpsModuleProps) {
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
+  const [activeSheet, setActiveSheet] = useState<string>('__ALL__');
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [copied, setCopied] = useState(false);
@@ -90,6 +92,7 @@ export function SatelGpsBackup({
         const buffer = e.target?.result as ArrayBuffer;
         const result = parseExcelFile(buffer, file.name);
         setParseResult(result);
+        setActiveSheet(result.activeSheet || '__ALL__');
         setStatusMessage(null);
       } catch (err) {
         console.error('Error procesando el archivo Excel:', err);
@@ -103,17 +106,23 @@ export function SatelGpsBackup({
 
   // Browser download
   const handleDownload = () => {
-    if (!parseResult || parseResult.processedRows.length === 0) return;
+    if (!parseResult || parseResult.allProcessedRows.length === 0) return;
     try {
-      generateProcessedExcel(parseResult.processedRows, backupFileName);
+      const targetData =
+        parseResult.sheetNames.length > 1 ? parseResult.sheets : parseResult.allProcessedRows;
+      generateProcessedExcel(targetData, backupFileName);
       confetti({
         particleCount: 70,
         spread: 60,
         origin: { y: 0.8 },
       });
-      setStatusMessage({ type: 'success', text: `Descarga iniciada: ${backupFileName}` });
+      const sheetMsg =
+        parseResult.sheetNames.length > 1
+          ? ` (${parseResult.sheetNames.length} hojas)`
+          : '';
+      setStatusMessage({ type: 'success', text: `Descarga iniciada: ${backupFileName}${sheetMsg}` });
       if (onDownloadSuccess) {
-        onDownloadSuccess(backupFileName, parseResult.processedRows.length);
+        onDownloadSuccess(backupFileName, parseResult.allProcessedRows.length);
       }
       setTimeout(() => setStatusMessage(null), 4000);
     } catch (err) {
@@ -143,9 +152,12 @@ export function SatelGpsBackup({
 
   // Save directly to target folder (works in deployed cloud environments and local)
   const handleSaveToFolder = async () => {
-    if (!parseResult || parseResult.processedRows.length === 0) return;
+    if (!parseResult || parseResult.allProcessedRows.length === 0) return;
     setSavingLocal(true);
     setStatusMessage(null);
+
+    const targetData =
+      parseResult.sheetNames.length > 1 ? parseResult.sheets : parseResult.allProcessedRows;
 
     // Option 1: File System Access API (Works 100% in deployed app & localhost from browser)
     if (isClientPickerSupported) {
@@ -161,7 +173,7 @@ export function SatelGpsBackup({
           setFolderDisplayName(handle.name);
         }
 
-        const res = await saveToClientDirectory(handle, parseResult.processedRows, backupFileName);
+        const res = await saveToClientDirectory(handle, targetData, backupFileName);
 
         confetti({
           particleCount: 80,
@@ -169,7 +181,11 @@ export function SatelGpsBackup({
           origin: { y: 0.8 },
         });
 
-        const successText = `¡Guardado en "${res.folderName}" como "${res.fileName}"!`;
+        const sheetMsg =
+          parseResult.sheetNames.length > 1
+            ? ` con ${parseResult.sheetNames.length} hojas`
+            : '';
+        const successText = `¡Guardado en "${res.folderName}" como "${res.fileName}"${sheetMsg}!`;
         setStatusMessage({ type: 'success', text: successText });
 
         if (onSaveSuccess) {
@@ -194,7 +210,8 @@ export function SatelGpsBackup({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          rows: parseResult.processedRows,
+          rows: parseResult.allProcessedRows,
+          sheets: parseResult.sheets,
           folderPath: localFolder,
           fileName: backupFileName,
         }),
@@ -203,7 +220,7 @@ export function SatelGpsBackup({
       const data = await res.json();
       if (!res.ok) {
         // Fallback for cloud/serverless where server disk is read-only
-        generateProcessedExcel(parseResult.processedRows, backupFileName);
+        generateProcessedExcel(targetData, backupFileName);
         setStatusMessage({
           type: 'success',
           text: `Servidor en la nube: archivo descargado en tu equipo como ${backupFileName}`,
@@ -225,7 +242,7 @@ export function SatelGpsBackup({
       const error = err as Error;
       // Respaldo de descarga inmediata
       try {
-        generateProcessedExcel(parseResult.processedRows, backupFileName);
+        generateProcessedExcel(targetData, backupFileName);
         setStatusMessage({
           type: 'success',
           text: `Descargado directamente en tu equipo: ${backupFileName}`,
@@ -265,25 +282,36 @@ export function SatelGpsBackup({
     });
   };
 
-  // Real-time search filter
-  const filteredRows = useMemo(() => {
+  // Compute active sheet rows (supports '__ALL__' or individual sheets)
+  const currentSheetRows = useMemo(() => {
     if (!parseResult) return [];
-    if (!searchTerm.trim()) return parseResult.processedRows;
+    if (activeSheet === '__ALL__') {
+      return parseResult.allProcessedRows;
+    }
+    return parseResult.sheets[activeSheet] || parseResult.processedRows;
+  }, [parseResult, activeSheet]);
+
+  // Real-time search filter on active sheet rows
+  const filteredRows = useMemo(() => {
+    if (!currentSheetRows) return [];
+    if (!searchTerm.trim()) return currentSheetRows;
 
     const term = searchTerm.toLowerCase();
-    return parseResult.processedRows.filter((r) =>
+    return currentSheetRows.filter((r) =>
       r.nombre.toLowerCase().includes(term) ||
       r.imei.toLowerCase().includes(term) ||
       r.numeroChip.toLowerCase().includes(term) ||
       r.equipoGps.toLowerCase().includes(term) ||
       r.usuarios.toLowerCase().includes(term) ||
+      (r.sheetName && r.sheetName.toLowerCase().includes(term)) ||
       r.ultimaFecha.toLowerCase().includes(term) ||
       r.ultimaHora.toLowerCase().includes(term)
     );
-  }, [parseResult, searchTerm]);
+  }, [currentSheetRows, searchTerm]);
 
   const handleReset = () => {
     setParseResult(null);
+    setActiveSheet('__ALL__');
     setSearchTerm('');
     setStatusMessage(null);
   };
@@ -300,7 +328,8 @@ export function SatelGpsBackup({
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden gap-2">
           <ControlToolbar
             backupFileName={backupFileName}
-            totalRows={parseResult.processedRows.length}
+            totalRows={parseResult.allProcessedRows.length}
+            totalSheets={parseResult.sheetNames.length}
             activeDate={activeDate}
             savingLocal={savingLocal}
             copied={copied}
@@ -321,11 +350,22 @@ export function SatelGpsBackup({
             onDismissStatus={() => setStatusMessage(null)}
           />
 
+          {/* Interactive Sheet Tabs for multi-sheet workbooks */}
+          <SheetTabs
+            sheetNames={parseResult.sheetNames}
+            sheets={parseResult.sheets}
+            totalAllRows={parseResult.allProcessedRows.length}
+            activeSheet={activeSheet}
+            onSelectSheet={setActiveSheet}
+          />
+
           <DeviceTable
             rows={filteredRows}
-            totalRows={parseResult.processedRows.length}
+            totalRows={currentSheetRows.length}
             backupFolder={localFolder}
             hasFilter={Boolean(searchTerm.trim())}
+            activeSheetName={activeSheet}
+            totalSheets={parseResult.sheetNames.length}
           />
         </div>
       )}

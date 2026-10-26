@@ -8,9 +8,18 @@ interface DeviceTableProps {
   totalRows: number;
   backupFolder: string;
   hasFilter: boolean;
+  activeSheetName?: string;
+  totalSheets?: number;
 }
 
-export function DeviceTable({ rows, totalRows, backupFolder, hasFilter }: DeviceTableProps) {
+export function DeviceTable({
+  rows,
+  totalRows,
+  backupFolder,
+  hasFilter,
+  activeSheetName,
+  totalSheets = 1,
+}: DeviceTableProps) {
   return (
     <div className="flex-1 min-h-0 flex flex-col rounded-xl border border-slate-800 overflow-hidden glass-panel shadow-2xl">
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto w-full">
@@ -53,8 +62,17 @@ export function DeviceTable({ rows, totalRows, backupFolder, hasFilter }: Device
                   </td>
 
                   {/* NOMBRE */}
-                  <td className="px-4 py-2 font-semibold text-white border-r border-slate-800/40 whitespace-nowrap">
-                    {row.nombre || <span className="text-slate-600">-</span>}
+                  <td className="px-4 py-2 text-white border-r border-slate-800/40 whitespace-nowrap">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-semibold text-white">
+                        {row.nombre || <span className="text-slate-600">-</span>}
+                      </span>
+                      {row.sheetName && totalSheets > 1 && (
+                        <span className="text-[10px] font-mono text-blue-400/80 truncate max-w-[180px]">
+                          Hoja: {row.sheetName}
+                        </span>
+                      )}
+                    </div>
                   </td>
 
                   {/* IMEI */}
@@ -136,6 +154,11 @@ export function DeviceTable({ rows, totalRows, backupFolder, hasFilter }: Device
             Mostrando <strong className="text-white">{rows.length}</strong> de{' '}
             <strong className="text-white">{totalRows}</strong> dispositivos
           </span>
+          {activeSheetName && totalSheets > 1 && (
+            <span className="text-[10px] text-blue-300 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 font-medium">
+              Hoja: {activeSheetName === '__ALL__' ? 'Todas las hojas' : activeSheetName}
+            </span>
+          )}
           {hasFilter && <span className="text-blue-400 font-medium">(Filtro activo)</span>}
         </div>
 

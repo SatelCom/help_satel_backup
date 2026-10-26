@@ -52,10 +52,11 @@ export function getDefaultBackupDirectory(): string {
 
 /**
  * Writes the processed GPS records to an Excel file on disk.
+ * Supports a single row array or a map of sheets Record<string, ProcessedGPSRow[]>.
  * Handles locked files gracefully (e.g. if open in Excel) by incrementing suffix.
  */
 export function writeBackupToDisk(
-  rows: ProcessedGPSRow[],
+  data: ProcessedGPSRow[] | Record<string, ProcessedGPSRow[]>,
   targetFolder?: string,
   fileName?: string
 ): SaveBackupResult {
@@ -82,7 +83,7 @@ export function writeBackupToDisk(
   let fullPath = path.join(finalFolder, finalFileName);
 
   // Generate standardized workbook using centralized processor
-  const wb = createProcessedWorkbook(rows);
+  const wb = createProcessedWorkbook(data);
   const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
 
   let wasLocked = false;
